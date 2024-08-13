@@ -182,7 +182,7 @@ void RemoteIO::begin()
         String ref = data["ref"].as<String>();
         setIO[ref]["value"] = data["value"];
         
-        if (setIO[ref]["Mode"] == "OUTPUT")
+        if (setIO[ref]["type"] == "OUTPUT")
         {
           updatePinOutput(ref);
         }
@@ -623,7 +623,7 @@ void RemoteIO::socketIOEvent(socketIOmessageType_t type, uint8_t *payload, size_
 
       setIO[ref]["value"] = value;
 
-      if (setIO[ref]["Mode"] == "OUTPUT")
+      if (setIO[ref]["type"] == "OUTPUT")
       {
         updatePinOutput(ref);
       }
@@ -829,25 +829,25 @@ void RemoteIO::tryAuthenticate()
       if (type == "INPUT" || type == "INPUT_ANALOG")
       {
         setIO[ref]["pin"] = pin;
-        setIO[ref]["Mode"] = type;
+        setIO[ref]["type"] = type;
         pinMode(pin, INPUT);
       }
       else if (type == "INPUT_PULLUP")
       {
         setIO[ref]["pin"] = pin;
-        setIO[ref]["Mode"] = type;
+        setIO[ref]["type"] = type;
         pinMode(pin, INPUT_PULLUP);
       }
       else if (type == "OUTPUT")
       {
         setIO[ref]["pin"] = pin;
-        setIO[ref]["Mode"] = type;
+        setIO[ref]["type"] = type;
         pinMode(pin, OUTPUT);
       } 
       else 
       {
         setIO[ref]["pin"] = pin;
-        setIO[ref]["Mode"] = "N/L";
+        setIO[ref]["type"] = "N/L";
       }
     }
   }
@@ -887,7 +887,7 @@ void RemoteIO::fetchLatestData()
       
       setIO[auxRef]["value"] = auxValue;
       
-      if (setIO[auxRef]["Mode"] == "OUTPUT")
+      if (setIO[auxRef]["type"] == "OUTPUT")
       {
         updatePinOutput(auxRef);
       }
@@ -930,7 +930,7 @@ void RemoteIO::updatePinOutput(String ref)
 void RemoteIO::updatePinInput(String ref)
 {
   int pinRef = setIO[ref]["pin"].as<int>();
-  String typeRef = setIO[ref]["Mode"].as<String>();
+  String typeRef = setIO[ref]["type"].as<String>();
   int delayTime = setIO[ref]["delay"].as<int>() * 1000; // variável de configuração sincronizada com a plataforma
   int timestamp = setIO[ref]["timestamp"].as<int>();  // variável de configuração local, dessincronizada
   
