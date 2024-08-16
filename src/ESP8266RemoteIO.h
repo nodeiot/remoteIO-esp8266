@@ -112,6 +112,7 @@ class RemoteIO
     bool anchored;
     bool anchoring;
     int lastIP_index;
+    int reconnect_counter;
 };
 
 #endif // ESP8266RemoteIO_h

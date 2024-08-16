@@ -42,6 +42,7 @@ RemoteIO::RemoteIO()
   lastIP_index = -1;
   anchored = false;
   anchoring = false;
+  reconnect_counter = 0;
 }
 
 void RemoteIO::begin()
@@ -469,6 +470,7 @@ void RemoteIO::switchState()
     case DISCONNECTED:
       if (Connected)
       {
+        reconnect_counter = 0;
         //Serial.println("[DISCONNECTED] vai pro CONNECTED");
         next_state = CONNECTED;
       }
@@ -547,6 +549,8 @@ void RemoteIO::stateLogic()
       
       if (millis() - start_reconnect_time >= 60000)
       {
+        if (reconnect_counter >= 3) ESP.restart();
+        else reconnect_counter++;
         start_reconnect_time = millis();
         start_debounce_time = millis();
         nodeIotConnection(); 
