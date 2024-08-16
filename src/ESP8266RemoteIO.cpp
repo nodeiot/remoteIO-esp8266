@@ -12,6 +12,15 @@
 #include "ESP8266RemoteIO.h";
 #include "index_html.h";
 
+typedef struct interrupt_data 
+{
+  RemoteIO* remoteio_pointer;
+  String ref_arg;
+} interrupt_data;
+
+DynamicJsonDocument post_data_queue(1024);
+unsigned long last_queue_sent_time = 0;
+
 RemoteIO::RemoteIO()
 {
   _appPort = 5000;
@@ -387,12 +396,23 @@ void RemoteIO::startAccessPoint()
   });
 }
 
+void RemoteIO::sendDataFromQueue()
+{
+  if (post_data_queue.size() >= 1)
+  {
+    last_queue_sent_time = millis();
+    espPOST(post_data_queue);
+    post_data_queue.clear();
+  }
+}
+
 void RemoteIO::loop()
 {
   ArduinoOTA.handle();
   switchState();
   stateLogic();
   checkResetting(5000); 
+  sendDataFromQueue();
 }
 
 void RemoteIO::browseService(const char * service, const char * proto)
@@ -748,8 +768,29 @@ void RemoteIO::socketIOConnect()
     String output;
     serializeJson(doc, output);
     Connected = socketIO.sendEVENT(output);
-    //if (Connected) //Serial.println("[socketIOConnect] Connected");
+    if (Connected) Serial.println("[socketIOConnect] Connected");
     //else Serial.println("[socketIOConnect] Failed connecting");
+  }
+}
+
+void IRAM_ATTR RemoteIO::interruptCallback(void* arg)
+{
+  interrupt_data* obj = (interrupt_data*)arg;
+  
+  if (post_data_queue.size() <= 10)
+  {
+    unsigned long reading_timestamp = millis();
+    int value = digitalRead(obj->remoteio_pointer->setIO[obj->ref_arg]["pin"].as<int>());
+    
+    DynamicJsonDocument doc(75);
+    doc["ref"] = obj->ref_arg;
+    doc["value"] = value;
+    doc["timestamp"] = reading_timestamp;
+
+    obj->remoteio_pointer->setIO[obj->ref_arg]["value"] = value;
+    obj->remoteio_pointer->setIO[obj->ref_arg]["timestamp"] = reading_timestamp;
+
+    post_data_queue.add(doc);
   }
 }
 
@@ -817,26 +858,104 @@ void RemoteIO::tryAuthenticate()
 
     token = document["token"].as<String>();
     extractIPAddress(document["serverAddr"].as<String>());
-    //Serial.println(document["serverAddr"].as<String>());
 
     for (size_t i = 0; i < document["gpio"].size(); i++)
     {
       String ref = document["gpio"][i]["ref"];
-
       int pin = document["gpio"][i]["pin"].as<int>();
       String type = document["gpio"][i]["type"];
+      String mode = document["gpio"][i]["mode"]; // modo de operação. Ex. p/ INPUTs: interrupção, cíclica, em horário definido...
 
       if (type == "INPUT" || type == "INPUT_ANALOG")
       {
         setIO[ref]["pin"] = pin;
         setIO[ref]["type"] = type;
+        setIO[ref]["mode"] = mode;
         pinMode(pin, INPUT);
+
+        interrupt_data* arg = new interrupt_data();
+        arg->remoteio_pointer = this;
+        arg->ref_arg = document["gpio"][i]["ref"].as<String>();
+        attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, ONHIGH);
+
+        /*if (mode == "interrupt_rising")
+        {
+          interrupt_data* arg = new interrupt_data();
+          arg->remoteio_pointer = this;
+          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
+          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, RISING);
+        }
+        else if (mode == "interrupt_falling")
+        {
+          interrupt_data* arg = new interrupt_data();
+          arg->remoteio_pointer = this;
+          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
+          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, FALLING);
+        }
+        else if (mode == "interrupt_change")
+        {
+          interrupt_data* arg = new interrupt_data();
+          arg->remoteio_pointer = this;
+          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
+          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, CHANGE);
+        }
+        else if (mode == "interrupt_onlow")
+        {
+          interrupt_data* arg = new interrupt_data();
+          arg->remoteio_pointer = this;
+          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
+          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, ONLOW);
+        }
+        else if (mode == "interrupt_onhigh")
+        {
+          interrupt_data* arg = new interrupt_data();
+          arg->remoteio_pointer = this;
+          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
+          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, ONHIGH);
+        }*/
       }
       else if (type == "INPUT_PULLUP")
       {
         setIO[ref]["pin"] = pin;
         setIO[ref]["type"] = type;
+        setIO[ref]["mode"] = mode;
         pinMode(pin, INPUT_PULLUP);
+
+        /*if (mode == "interrupt_rising")
+        {
+          interrupt_data* arg = new interrupt_data();
+          arg->remoteio_pointer = this;
+          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
+          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, RISING);
+        }
+        else if (mode == "interrupt_falling")
+        {
+          interrupt_data* arg = new interrupt_data();
+          arg->remoteio_pointer = this;
+          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
+          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, FALLING);
+        }
+        else if (mode == "interrupt_change")
+        {
+          interrupt_data* arg = new interrupt_data();
+          arg->remoteio_pointer = this;
+          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
+          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, CHANGE);
+        }
+        else if (mode == "interrupt_onlow")
+        {
+          interrupt_data* arg = new interrupt_data();
+          arg->remoteio_pointer = this;
+          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
+          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, ONLOW);
+        }
+        else if (mode == "interrupt_onhigh")
+        {
+          interrupt_data* arg = new interrupt_data();
+          arg->remoteio_pointer = this;
+          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
+          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, ONHIGH);
+        }*/
       }
       else if (type == "OUTPUT")
       {
@@ -966,6 +1085,16 @@ void RemoteIO::notFound(AsyncWebServerRequest *request)
   request->send(404, "application/json", "{\"message\":\"Not found\"}");
 }
 
+int RemoteIO::espPOST(JsonDocument arrayDoc)
+{
+  JsonDocument doc;
+  String value;
+  doc["deviceId"] = _deviceId;
+  doc["dataArray"] = arrayDoc;
+  serializeJson(doc, value);
+  return espPOST("appPostDataArray", "", value);
+}
+
 int RemoteIO::espPOST(String variable, String value)
 {
     return espPOST(appPostData, variable, value);
@@ -991,10 +1120,18 @@ int RemoteIO::espPOST(String Router, String variable, String value)
     if (Router == appPostData)
     {
       document["deviceId"] = _deviceId;
-      document["ref"] = variable;
-      document["value"] = value;
+      JsonDocument doc; 
+      doc["ref"] = variable;
+      doc["value"] = value;
+      document["dataArray"].add(doc);
       setIO[variable]["value"] = value;
       serializeJson(document, request);
+    }
+    else if (Router == "appPostDataArray")
+    {
+      Serial.println("esppost appPostDataArray");
+      route = appPostData;
+      request = value;
     }
     else request = value; 
     
@@ -1002,8 +1139,8 @@ int RemoteIO::espPOST(String Router, String variable, String value)
     https.addHeader("Content-Type", "application/json");
     https.addHeader("authorization", "Bearer " + token);
 
-    //Serial.print("[espPOST] Request: ");
-    //Serial.println(request);
+    Serial.print("[espPOST] Request: ");
+    Serial.println(request);
     
     int httpCode = https.POST(request);
 
