@@ -873,46 +873,13 @@ void RemoteIO::tryAuthenticate()
         setIO[ref]["mode"] = mode;
         pinMode(pin, INPUT);
 
-        interrupt_data* arg = new interrupt_data();
-        arg->remoteio_pointer = this;
-        arg->ref_arg = document["gpio"][i]["ref"].as<String>();
-        attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, ONHIGH);
-
-        /*if (mode == "interrupt_rising")
-        {
-          interrupt_data* arg = new interrupt_data();
-          arg->remoteio_pointer = this;
-          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
-          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, RISING);
-        }
-        else if (mode == "interrupt_falling")
-        {
-          interrupt_data* arg = new interrupt_data();
-          arg->remoteio_pointer = this;
-          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
-          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, FALLING);
-        }
-        else if (mode == "interrupt_change")
+        if (mode == "interrupt")
         {
           interrupt_data* arg = new interrupt_data();
           arg->remoteio_pointer = this;
           arg->ref_arg = document["gpio"][i]["ref"].as<String>();
           attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, CHANGE);
         }
-        else if (mode == "interrupt_onlow")
-        {
-          interrupt_data* arg = new interrupt_data();
-          arg->remoteio_pointer = this;
-          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
-          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, ONLOW);
-        }
-        else if (mode == "interrupt_onhigh")
-        {
-          interrupt_data* arg = new interrupt_data();
-          arg->remoteio_pointer = this;
-          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
-          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, ONHIGH);
-        }*/
       }
       else if (type == "INPUT_PULLUP")
       {
@@ -921,41 +888,13 @@ void RemoteIO::tryAuthenticate()
         setIO[ref]["mode"] = mode;
         pinMode(pin, INPUT_PULLUP);
 
-        /*if (mode == "interrupt_rising")
-        {
-          interrupt_data* arg = new interrupt_data();
-          arg->remoteio_pointer = this;
-          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
-          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, RISING);
-        }
-        else if (mode == "interrupt_falling")
-        {
-          interrupt_data* arg = new interrupt_data();
-          arg->remoteio_pointer = this;
-          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
-          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, FALLING);
-        }
-        else if (mode == "interrupt_change")
+        if (mode == "interrupt")
         {
           interrupt_data* arg = new interrupt_data();
           arg->remoteio_pointer = this;
           arg->ref_arg = document["gpio"][i]["ref"].as<String>();
           attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, CHANGE);
         }
-        else if (mode == "interrupt_onlow")
-        {
-          interrupt_data* arg = new interrupt_data();
-          arg->remoteio_pointer = this;
-          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
-          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, ONLOW);
-        }
-        else if (mode == "interrupt_onhigh")
-        {
-          interrupt_data* arg = new interrupt_data();
-          arg->remoteio_pointer = this;
-          arg->ref_arg = document["gpio"][i]["ref"].as<String>();
-          attachInterruptArg(digitalPinToInterrupt(pin), interruptCallback, (void*)arg, ONHIGH);
-        }*/
       }
       else if (type == "OUTPUT")
       {
