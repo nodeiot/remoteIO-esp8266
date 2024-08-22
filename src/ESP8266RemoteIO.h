@@ -12,6 +12,8 @@
 #ifndef ESP8266RemoteIO_h
 #define ESP8266RemoteIO_h
 
+#define VERSION "1.0.1"
+
 #define JSON_DOCUMENT_CAPACITY 4096
 
 #define INICIALIZATION 0    // First state after start, never connected to nodeiot. 
