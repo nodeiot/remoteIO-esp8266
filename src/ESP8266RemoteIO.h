@@ -12,7 +12,7 @@
 #ifndef ESP8266RemoteIO_h
 #define ESP8266RemoteIO_h
 
-#define VERSION "1.0.1"
+#define VERSION "1.0.2"
 
 #define JSON_DOCUMENT_CAPACITY 4096
 
