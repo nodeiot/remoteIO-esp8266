@@ -297,7 +297,7 @@ const char page_monitor[] PROGMEM = R"rawliteral(
             display: flex;
             justify-content: center;
             width: 200px;
-            height: 65px;
+            height: 80px;
             align-self: flex-end;
             
         }
@@ -313,7 +313,7 @@ const char page_monitor[] PROGMEM = R"rawliteral(
             font-weight: 600;
             background-color: #265FFF;
             color: white;
-            margin-top: 15px;
+            margin-top: 25px;
             cursor: pointer;
             border: none;
         }
@@ -321,7 +321,7 @@ const char page_monitor[] PROGMEM = R"rawliteral(
         .Logo {
             display: flex;
             width: 200px;
-            height: 65px;
+            height: 80px;
         }
 
         .on {
@@ -425,6 +425,10 @@ const char page_monitor[] PROGMEM = R"rawliteral(
                                         <label for="version"></label>
                                         <span id="version">-</span><br>
                                     </h2>
+                                    <h2>Horário Local:
+                                        <label for="localTime"></label>
+                                        <span id="localTime">-</span><br>
+                                    </h2>
                                 </form>
                             </div>
                         </div>
@@ -478,6 +482,7 @@ const char page_monitor[] PROGMEM = R"rawliteral(
                         document.getElementById("model").textContent = data["RemoteIO"]["model"];
                         document.getElementById("memory").textContent = data["RemoteIO"]["memory"];
                         document.getElementById("version").textContent = data["RemoteIO"]["version"];
+                        document.getElementById("localTime").textContent = data["RemoteIO"]["localTime"];
                         document.getElementById("companyName").textContent = data["NodeIoT"]["companyName"];
                         document.getElementById("deviceId").textContent = data["NodeIoT"]["deviceId"];
                         document.getElementById("authentication").textContent = data["NodeIoT"]["authentication"];
