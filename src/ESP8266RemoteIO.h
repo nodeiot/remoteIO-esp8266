@@ -34,6 +34,7 @@
 #include <ESP8266HTTPClient.h>
 #include <ESPAsyncTCP.h>
 #include <ESP8266mDNS.h>
+#include <time.h>
 
 class RemoteIO 
 {
@@ -51,6 +52,8 @@ class RemoteIO
     void notFound(AsyncWebServerRequest *request);
     void localHttpUpdateMsg(String ref, String value);
     static void IRAM_ATTR interruptCallback(void* arg);
+    static void inputTimerCallback(void* arg);
+    static void outputTimerCallback(void* arg);
     void tryAuthenticate();    
     void fetchLatestData();
     void browseService(const char * service, const char * proto);
@@ -63,13 +66,21 @@ class RemoteIO
     void extractIPAddress(String url);
     void startAccessPoint();
     void checkResetting(long timeInterval);
+    void updateEventArray();
+    void getEvents();
+    void setTimer();
     int espPOST(JsonDocument arrayDoc);
     int espPOST(String Router, String variable, String value);
+
+    os_timer_t timer;
 
     StaticJsonDocument<JSON_DOCUMENT_CAPACITY> configurationDocument;
     JsonArray configurations;
     StaticJsonDocument<512> monitor_doc;
     
+    JsonDocument event_doc;
+    JsonArray event_array;
+
     SocketIOclient socketIO;
     AsyncWebServer* server;
 
@@ -96,11 +107,18 @@ class RemoteIO
     String appPostData;
     String appPostDataFromAnchored;
 
+    const char* ntp_server1 = "pool.ntp.org";
+    const char* ntp_server2 = "time.nist.gov";
+    
     long start_debounce_time;
     long start_browsing_time;
     long start_reconnect_time;
     long start_config_time; 
     long start_reset_time;
+
+    long gmtOffset_sec;
+    int daylightOffset_sec;
+    struct tm timeinfo;
 
     String state;
     String token;

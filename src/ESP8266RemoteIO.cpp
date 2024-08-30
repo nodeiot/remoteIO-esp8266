@@ -21,10 +21,11 @@ typedef struct interrupt_data
 DynamicJsonDocument post_data_queue(1024);
 unsigned long last_queue_sent_time = 0;
 
+volatile bool timer_expired;
+
 RemoteIO::RemoteIO()
 {
   _appPort = 5000;
-
   server = new AsyncWebServer(80);
 
   anchor_route = "http://anchor_IP/post-message";
@@ -35,6 +36,8 @@ RemoteIO::RemoteIO()
     
   configurations = configurationDocument.to<JsonArray>();
   setIO = configurations.createNestedObject();
+
+  event_array = event_doc.to<JsonArray>();
 
   Connected = false;
   Socketed = 0;
@@ -71,15 +74,12 @@ void RemoteIO::begin()
 
   if (!file) 
   {
-    //Serial.println("\nnão achei o config.json");
     hasConfig = false;
   }
   else 
   {
-    //Serial.println("\nachei o config.json");
     deserializeJson(nvsDoc, file);
   }
-  
   file.close();
 
   String NVS_SSID = nvsDoc["ssid"].as<String>();
@@ -110,31 +110,27 @@ void RemoteIO::begin()
     appPostDataFromAnchored = appBaseUrl + "/broker/ahamdata";
     appLastDataUrl = appBaseUrl + "/devices/getdata/" + _companyName + "/" + _deviceId;
 
+    timer_expired = false;
     nodeIotConnection();
 
     String LOCAL_DOMAIN = String("niot-") + String(_deviceId);
+    LOCAL_DOMAIN.toLowerCase();
 
     if (!MDNS.begin(LOCAL_DOMAIN)) 
     {
-      //Serial.println("Erro ao configurar o mDNS");
+      Serial.println("Erro ao configurar o mDNS");
     }
 
     AsyncCallbackJsonWebHandler* handler = new AsyncCallbackJsonWebHandler("/post-message", [this](AsyncWebServerRequest *request, JsonVariant &json) {
       StaticJsonDocument<250> data;
       String response;
-      if (json.is<JsonArray>())
-      {
-        data = json.as<JsonArray>();
-      }
-      else if (json.is<JsonObject>())
-      {
-        data = json.as<JsonObject>();
-      }
+
+      if (json.is<JsonArray>()) data = json.as<JsonArray>();
+      else if (json.is<JsonObject>()) data = json.as<JsonObject>();
       
       //Serial.print("[AsyncCallback]: ");
       //Serial.println(data.as<String>());
 
-      
       if (data.containsKey("status"))
       {
         if (connection_state == CONNECTED)
@@ -260,8 +256,7 @@ void RemoteIO::begin()
 
   server->on("/monitor-reset", HTTP_GET, [this](AsyncWebServerRequest *request) {
       
-      if (SPIFFS.remove("/config.json")) //Serial.println("/config.json removido com sucesso!");
-      //else //Serial.println("Falha ao remover /config.json");
+      SPIFFS.remove("/config.json");
       request->send(200, "text/plain", "Reset de credenciais efetuado com sucesso! Reiniciando dispositivo...");
       delay(1000);
       ESP.restart();
@@ -280,6 +275,16 @@ void RemoteIO::begin()
       if (Connected) monitor_doc["NodeIoT"]["connection"] = "Conectado";
       else monitor_doc["NodeIoT"]["connection"] = "Desconectado";
 
+      char timeString[64];
+      if (!getLocalTime(&timeinfo))
+      {
+        sprintf(timeString, "Desconectado");
+      }
+      else
+      {
+        strftime(timeString, sizeof(timeString), "%A, %B %d %Y %H:%M:%S", &timeinfo);
+      }
+
       monitor_doc["Wi-Fi"]["ssid"] = _ssid;
       monitor_doc["Wi-Fi"]["ipLocal"] = WiFi.localIP().toString();
       monitor_doc["Wi-Fi"]["state"] = wifi_state;
@@ -287,6 +292,7 @@ void RemoteIO::begin()
       monitor_doc["RemoteIO"]["model"] = _model;
       monitor_doc["RemoteIO"]["memory"] = String((ESP.getFlashChipRealSize() / 1024));
       monitor_doc["RemoteIO"]["version"] = VERSION;
+      monitor_doc["RemoteIO"]["localTime"] = String(timeString);
       monitor_doc["NodeIoT"]["companyName"] = _companyName;
       monitor_doc["NodeIoT"]["deviceId"] = _deviceId;
 
@@ -315,8 +321,7 @@ void RemoteIO::checkResetting(long timeInterval)
     if (start_reset_time == 0) start_reset_time = millis();
     else if (millis() - start_reset_time >= timeInterval)
     {
-      if (SPIFFS.remove("/config.json")) //Serial.println("/config.json removido com sucesso!");
-      //else //Serial.println("Falha ao remover /config.json");
+      SPIFFS.remove("/config.json");
       delay(1000);
       ESP.restart();
     }
@@ -326,12 +331,12 @@ void RemoteIO::checkResetting(long timeInterval)
 
 void RemoteIO::startAccessPoint()
 {
-  File model_file = SPIFFS.open("/model.json", "r");
   StaticJsonDocument<100> model_doc;
+
+  File model_file = SPIFFS.open("/model.json", "r");
   deserializeJson(model_doc, model_file);
   model_file.close();
   _model = model_doc["model"].as<String>();
-  //Serial.println(_model);
   model_doc.clear();
 
   WiFi.disconnect(true);
@@ -351,9 +356,7 @@ void RemoteIO::startAccessPoint()
   Serial.println("Ponto de acesso iniciado");
 
   IPAddress IP = WiFi.softAPIP();
-  //Serial.print("IP do ponto de acesso: ");
-  //Serial.println(IP);
-
+  
   String LOCAL_DOMAIN = String("remoteio");
 
   if (!MDNS.begin(LOCAL_DOMAIN)) 
@@ -414,6 +417,7 @@ void RemoteIO::loop()
   switchState();
   stateLogic();
   checkResetting(5000); 
+  updateEventArray();
   sendDataFromQueue();
 }
 
@@ -584,106 +588,88 @@ void RemoteIO::socketIOEvent(socketIOmessageType_t type, uint8_t *payload, size_
 {
   switch (type)
   {
-  case sIOtype_DISCONNECT:
-    //Serial.printf("[IOc] Disconnected!\n");
-    Connected = false;
-    break;
-  case sIOtype_CONNECT:
-    //Serial.printf("[IOc] Connected to url: %s\n", payload);
-    socketIO.send(sIOtype_CONNECT, "/");
-    break;
-  case sIOtype_EVENT:
-  {
-    char *sptr = NULL;
-    int id = strtol((char *)payload, &sptr, 10);
+    case sIOtype_DISCONNECT:
+      Connected = false;
+      break;
+    case sIOtype_CONNECT:
+      socketIO.send(sIOtype_CONNECT, "/");
+      break;
+    case sIOtype_EVENT:
+      char *sptr = NULL;
+      int id = strtol((char *)payload, &sptr, 10);
 
-    //Serial.printf("[IOc] get event: %s id: %d\n", payload, id);
-    
-    if (id)
-    {
-      payload = (uint8_t *)sptr;
-    }
-
-    StaticJsonDocument<1024> doc;
-    StaticJsonDocument<250> doc2;
-    DeserializationError error = deserializeJson(doc, payload, length);
-
-    if (error)
-    {
-      //Serial.print(F("[IOc]: deserializeJson() failed: "));
-      //Serial.println(error.c_str());
-      return;
-    }
-
-    String eventName = doc[0];
-
-    //Serial.printf("[IOc] event name: %s\n", eventName.c_str());
-
-    if (doc[1].containsKey("ipdest")) 
-    {
-      doc2["ref"] = doc[1]["ref"];
-      doc2["value"] = doc[1]["value"];
+      //Serial.printf("[IOc] get event: %s id: %d\n", payload, id);
       
-      anchored_IP = doc[1]["ipdest"].as<String>();
-      serializeJson(doc2, send_to_anchored_buffer);
-      
-      doc2.clear();
-      
-      espPOST(anchored_route, "", send_to_anchored_buffer);
-      send_to_anchored_buffer.clear();
-    }
-    else 
-    {
-      String ref = doc[1]["ref"];
-      String value = doc[1]["value"];
-
-      if (ref == "restart") ESP.restart();
-      else if (ref == "reset")
+      if (id)
       {
-        if (SPIFFS.remove("/config.json")) //Serial.println("/config.json removido com sucesso!");
-        //else //Serial.println("Falha ao remover /config.json");
-        delay(1000);
-        ESP.restart();
+        payload = (uint8_t *)sptr;
       }
 
-      setIO[ref]["value"] = value;
+      StaticJsonDocument<1024> doc;
+      StaticJsonDocument<250> doc2;
+      DeserializationError error = deserializeJson(doc, payload, length);
 
-      if (setIO[ref]["type"] == "OUTPUT")
+      if (error)
       {
-        updatePinOutput(ref);
+        //Serial.print(F("[IOc]: deserializeJson() failed: "));
+        //Serial.println(error.c_str());
+        return;
       }
-    }
-    doc.clear();
-  }
-  break;
-  case sIOtype_ACK:
-    //Serial.printf("[IOc] get ack: %u\n", length);
-    break;
-  case sIOtype_ERROR:
-    //Serial.printf("[IOc] get error: %u\n", length);
-    break;
-  case sIOtype_BINARY_EVENT:
-    //Serial.printf("[IOc] get binary: %u\n", length);
-    break;
-  case sIOtype_BINARY_ACK:
-    //Serial.printf("[IOc] get binary ack: %u\n", length);
-    break;
+
+      String eventName = doc[0];
+
+      if (doc[1].containsKey("ipdest")) 
+      {
+        doc2["ref"] = doc[1]["ref"];
+        doc2["value"] = doc[1]["value"];
+        
+        anchored_IP = doc[1]["ipdest"].as<String>();
+        serializeJson(doc2, send_to_anchored_buffer);
+        
+        doc2.clear();
+        
+        espPOST(anchored_route, "", send_to_anchored_buffer);
+        send_to_anchored_buffer.clear();
+      }
+      else 
+      {
+        String ref = doc[1]["ref"];
+        String value = doc[1]["value"];
+
+        if (ref == "restart") ESP.restart();
+        else if (ref == "reset")
+        {
+          if (SPIFFS.remove("/config.json")) //Serial.println("/config.json removido com sucesso!");
+          //else //Serial.println("Falha ao remover /config.json");
+          delay(1000);
+          ESP.restart();
+        }
+
+        setIO[ref]["value"] = value;
+
+        if (setIO[ref]["type"] == "OUTPUT")
+        {
+          updatePinOutput(ref);
+        }
+      }
+      doc.clear();
+      break;
   }
 }
 
 void RemoteIO::nodeIotConnection()
 {
-  WiFi.disconnect(true);
-  Connected = false;
-  WiFi.mode(WIFI_STA);
   String hostname = String("niot-") + String(_deviceId);
-  WiFi.setHostname(hostname.c_str());
-  WiFi.begin(_ssid, _password);
+  hostname.toLowerCase();
+  Connected = false;
 
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(_ssid, _password);
   WiFi.waitForConnectResult();
+  WiFi.setHostname(hostname.c_str());
 
   long wifi_conn_time = 0;
-
   if (!ssidAuth) 
   {
     wifi_conn_time = millis();
@@ -691,23 +677,18 @@ void RemoteIO::nodeIotConnection()
 
   while (WiFi.status() != WL_CONNECTED)
   {
-    //Serial.print(".");
     delay(500);
     if ((wifi_conn_time > 0) && (millis() - wifi_conn_time >= 5000))
     {
-      //Serial.println("deu 5 segundos");
       if (SPIFFS.remove("/config.json")) 
       {
-        //Serial.println("/config.json removido com sucesso!");
         delay(1000);
         ESP.restart();
       }
-      //else Serial.println("Falha ao remover /config.json");
     }
     if ((start_debounce_time != 0) && (millis() - start_debounce_time >= 2000))
     {
       WiFi.disconnect();
-      //Serial.println("[niotConnection] wifi.disconnect(), return");
       return;
     }
   }
@@ -719,18 +700,22 @@ void RemoteIO::nodeIotConnection()
     deserializeJson(nvsDoc, file);
     file.close();
     nvsDoc["ssidAuth"] = true;
-    if (SPIFFS.remove("/config.json")) //Serial.println("atualizando spiffs, /config.json removido com sucesso!");
+    SPIFFS.remove("/config.json"); 
     file = SPIFFS.open("/config.json", "w");
     serializeJson(nvsDoc, file);
     nvsDoc.clear();
     file.close();
   }
 
-  //Serial.printf("[nodeIotConnection] WiFi Connected %s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("[nodeIotConnection] WiFi Connected %s\n", WiFi.localIP().toString().c_str());
 
   appVerifyUrl.replace(" ", "%20");
   appLastDataUrl.replace(" ", "%20");
   
+  gmtOffset_sec = (-3) * 3600;
+  daylightOffset_sec = 0;
+  configTime(gmtOffset_sec, daylightOffset_sec, ntp_server1, ntp_server2);
+
   while (state != "accepted")
   {
     if ((start_debounce_time != 0) && (millis() - start_debounce_time >= 2000))
@@ -796,6 +781,116 @@ void IRAM_ATTR RemoteIO::interruptCallback(void* arg)
     obj->remoteio_pointer->setIO[obj->ref_arg]["timestamp"] = reading_timestamp;
 
     post_data_queue.add(doc);
+  }
+}
+
+void RemoteIO::inputTimerCallback(void* arg)
+{
+  interrupt_data* obj = (interrupt_data*)arg;
+  String ref = obj->ref_arg;
+  String refType = obj->remoteio_pointer->setIO[ref]["type"].as<String>();
+  int refPin = obj->remoteio_pointer->setIO[ref]["pin"].as<int>();
+
+  JsonDocument doc;
+  doc["ref"] = ref;
+
+  if (refType == "INPUT" || refType == "INPUT_PULLUP" || refType == "INPUT_PULLDOWN")
+  {
+    doc["value"] = String(digitalRead(refPin));
+  }
+  else if (refType == "INPUT_ANALOG")
+  {
+    doc["value"] == String(analogRead(refPin));
+  }
+  
+  doc["timestamp"] = String(millis());
+  post_data_queue.add(doc);
+  timer_expired = true; // para sinalizar ao loop principal
+}
+
+void RemoteIO::outputTimerCallback(void *arg)
+{
+  interrupt_data* obj = (interrupt_data*)arg;
+  String ref = obj->ref_arg;
+  String newValue;
+  int current_value = obj->remoteio_pointer->setIO[ref]["value"].as<int>();
+
+  if (current_value == 1) newValue = "0";
+  else if (current_value == 0) newValue = "1";
+  
+  obj->remoteio_pointer->setIO[ref]["value"] = newValue;
+  obj->remoteio_pointer->updatePinOutput(ref);
+
+  JsonDocument doc;
+  doc["ref"] = ref;
+  doc["value"] = newValue;
+  doc["timestamp"] = String(millis());
+
+  post_data_queue.add(doc);
+  timer_expired = true; // para sinalizar ao loop principal
+}
+
+void RemoteIO::updateEventArray()
+{
+  if ((timer_expired) && (event_array.size() > 0) && (event_array[0]["active"].as<bool>()))
+  {
+    event_array.remove(0);
+    timer_expired = false;
+
+    // set do timer para um novo evento
+    setTimer();
+
+    // obtém novos eventos da plataforma
+    // getEvents();
+  }
+}
+
+void RemoteIO::getEvents()
+{
+  // http get numa rota para pegar um array de eventos
+}
+
+void RemoteIO::setTimer()
+{
+  int currentHour, currentMinute, currentSecond;
+
+  if (getLocalTime(&timeinfo) && event_array.size() > 0)
+  {
+    currentHour = timeinfo.tm_hour;
+    currentMinute = timeinfo.tm_min;
+    currentSecond = timeinfo.tm_sec;
+    
+    if (!event_array[0]["state"].as<bool>()) 
+    {
+      int delaySeconds = (event_array[0]["targetHour"].as<int>() * 3600 + event_array[0]["targetMinute"].as<int>() * 60 + event_array[0]["targetSecond"].as<int>()) - 
+                          (currentHour * 3600 + currentMinute * 60 + currentSecond);
+      
+      // Adjust if target time is the next day
+      if (delaySeconds < 0) delaySeconds += 86400;
+
+      String ref = event_array[0]["ref"].as<String>();
+      String refType = setIO[ref]["type"].as<String>();
+
+      Serial.print(ref);
+      Serial.printf(" event will trigger in %d seconds\n", delaySeconds);
+      
+      interrupt_data* arg = new interrupt_data();
+      arg->remoteio_pointer = this;
+      arg->ref_arg = ref;
+
+      if (refType == "OUTPUT")
+      {
+        os_timer_setfn(&timer, outputTimerCallback, arg);
+        os_timer_arm(&timer, delaySeconds * 1000, false);
+        event_array[0]["active"] = true;
+      }
+      else if (refType == "INPUT" || refType == "INPUT_PULLDOWN" || refType == "INPUT_PULLUP" || refType == "INPUT_ANALOG")
+      {
+        os_timer_setfn(&timer, inputTimerCallback, arg);
+        os_timer_arm(&timer, delaySeconds * 1000, false);
+        event_array[0]["active"] = true;
+      }
+    }
   }
 }
 
@@ -913,10 +1008,9 @@ void RemoteIO::tryAuthenticate()
         setIO[ref]["type"] = "N/L";
       }
     }
-  }
-  else
-  {
-    //Serial.printf("[tryAuthenticate] POST... failed, code: %i,  error: %s\n", statusCode, https.errorToString(statusCode).c_str());
+
+    //getEvents();
+    setTimer();
   }
   document.clear();
   https.end();
@@ -1067,6 +1161,7 @@ int RemoteIO::espPOST(String Router, String variable, String value)
       JsonDocument doc; 
       doc["ref"] = variable;
       doc["value"] = value;
+      doc["timestamp"] = String(millis());
       document["dataArray"].add(doc);
       setIO[variable]["value"] = value;
       serializeJson(document, request);
@@ -1110,17 +1205,8 @@ int RemoteIO::espPOST(String Router, String variable, String value)
     }
     else if (httpCode != HTTP_CODE_OK) 
     {
-      //Serial.printf("[espPOST] POST... failed, code: %i,  error: %s\n", httpCode, https.errorToString(httpCode).c_str());
-      
-      //Serial.printf("msg: %s\n", document["msg"].as<String>());
-      
-      if (Router == anchored_route && variable != "restart")
+      if (Router == anchor_route)
       {
-        //Serial.println("avisa plataforma q n recebeu");
-      }
-      else if (Router == anchor_route)
-      {
-        //Serial.println("[espPOST] perdi ancora");
         anchored = false;
       }
     }
