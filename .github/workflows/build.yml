@@ -36,3 +36,21 @@ jobs:
           FOR /F "delims=" %%F IN ('dir /b /s .pio\build\esp32dev\firmware.bin') DO SET BINARY_FILE=%%F
           echo Binary file path: %BINARY_FILE%
           echo ::set-output name=binary_path::%BINARY_FILE%
+    
+      - name: Configure AWS CLI
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+            aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+            aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            aws-region: us-east-1
+  
+      - name: Upload binary to S3 with specific name
+        if: success()
+        shell: cmd
+        run: |
+            aws s3 cp D:\a\remoteIO-esp8266\remoteIO-esp8266\.pio\build\esp12e\firmware.bin s3://%AWS_S3_BUCKET%/bin/esp8266/firmware8266.bin
+            aws s3 cp D:\a\remoteIO-esp8266\remoteIO-esp8266\.pio\build\esp12e\firmware.bin s3://%AWS_S3_BUCKET%/bin/esp8266/bootloader.bin
+            aws s3 cp D:\a\remoteIO-esp8266\remoteIO-esp8266\.pio\build\esp12e\firmware.bin s3://%AWS_S3_BUCKET%/bin/esp8266/partitions.bin
+  
+        env:
+            AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
