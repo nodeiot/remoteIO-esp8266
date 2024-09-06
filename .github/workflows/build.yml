@@ -1,0 +1,38 @@
+name: deployment binary to s3
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Build PlatformIO Project
+        run: pio run
+
+      - name: Find and Save Binary
+        id: find-binary
+        shell: cmd
+        run: |
+          FOR /F "delims=" %%F IN ('dir /b /s .pio\build\esp32dev\firmware.bin') DO SET BINARY_FILE=%%F
+          echo Binary file path: %BINARY_FILE%
+          echo ::set-output name=binary_path::%BINARY_FILE%
