@@ -33,6 +33,6 @@ jobs:
         id: find-binary
         shell: cmd
         run: |
-          FOR /F "delims=" %%F IN ('dir /b /s .pio\build\esp32dev\firmware.bin') DO SET BINARY_FILE=%%F
+          FOR /F "delims=" %%F IN ('dir /b /s .pio\build\esp12e\firmware.bin') DO SET BINARY_FILE=%%F
           echo Binary file path: %BINARY_FILE%
           echo ::set-output name=binary_path::%BINARY_FILE%
