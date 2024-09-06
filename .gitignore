@@ -1,5 +1,4 @@
 .pio
 .vscode
-src/main.cpp
 test
 data/model.json
