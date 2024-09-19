@@ -47,7 +47,7 @@ jobs:
         if: success()
         shell: cmd
         run: |
-            aws s3 cp D:\a\remoteIO-esp8266\remoteIO-esp8266\.pio\build\esp12e\firmware.bin s3://%AWS_S3_BUCKET%/bin/esp8266/firmware8266.bin
+            aws s3 cp D:\a\remoteIO-esp8266\remoteIO-esp8266\.pio\build\esp12e\firmware.bin s3://%AWS_S3_BUCKET%/bin/esp8266/firmware.bin
             aws s3 cp D:\a\remoteIO-esp8266\remoteIO-esp8266\.pio\build\esp12e\firmware.bin s3://%AWS_S3_BUCKET%/bin/esp8266/bootloader.bin
             aws s3 cp D:\a\remoteIO-esp8266\remoteIO-esp8266\.pio\build\esp12e\firmware.bin s3://%AWS_S3_BUCKET%/bin/esp8266/partitions.bin
   
