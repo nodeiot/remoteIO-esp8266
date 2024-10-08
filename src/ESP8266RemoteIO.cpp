@@ -18,9 +18,14 @@ typedef struct interrupt_data
   String ref_arg;
 } interrupt_data;
 
+typedef struct event_data
+{
+  RemoteIO* remoteio_pointer;
+  JsonDocument* actions_arg;
+} event_data;
+
 DynamicJsonDocument post_data_queue(1024);
 unsigned long last_queue_sent_time = 0;
-
 volatile bool timer_expired;
 
 RemoteIO::RemoteIO()
@@ -103,9 +108,10 @@ void RemoteIO::begin()
     _model = NVS_MODEL;
     ssidAuth = NVS_SSIDAUTH;
 
-    appBaseUrl = "https://api.nodeiot.app.br/api";
+    appBaseUrl = "https://api-dev.orlaguaiba.com.br/api"; //"https://api.nodeiot.app.br/api";
     appVerifyUrl = appBaseUrl + "/devices/verify";
     appPostData = appBaseUrl + "/broker/data/";
+    appPostMultiData = appBaseUrl + "/broker/multidata";
     appSideDoor = appBaseUrl + "/devices/devicedisconnected";
     appPostDataFromAnchored = appBaseUrl + "/broker/ahamdata";
     appLastDataUrl = appBaseUrl + "/devices/getdata/" + _companyName + "/" + _deviceId;
@@ -416,7 +422,7 @@ void RemoteIO::loop()
   ArduinoOTA.handle();
   switchState();
   stateLogic();
-  checkResetting(5000); 
+  //checkResetting(5000); 
   updateEventArray();
   sendDataFromQueue();
 }
@@ -707,7 +713,7 @@ void RemoteIO::nodeIotConnection()
     file.close();
   }
 
-  Serial.printf("[nodeIotConnection] WiFi Connected %s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("[nodeIotConnection] WiFi Connected %s\n\n", WiFi.localIP().toString().c_str());
 
   appVerifyUrl.replace(" ", "%20");
   appLastDataUrl.replace(" ", "%20");
@@ -784,112 +790,113 @@ void IRAM_ATTR RemoteIO::interruptCallback(void* arg)
   }
 }
 
-void RemoteIO::inputTimerCallback(void* arg)
+void RemoteIO::timerEventCallback(void *arg)
 {
-  interrupt_data* obj = (interrupt_data*)arg;
-  String ref = obj->ref_arg;
-  String refType = obj->remoteio_pointer->setIO[ref]["type"].as<String>();
-  int refPin = obj->remoteio_pointer->setIO[ref]["pin"].as<int>();
+  event_data* obj = (event_data*) arg;
+  JsonDocument& actions = *(obj->actions_arg);
 
-  JsonDocument doc;
-  doc["ref"] = ref;
-
-  if (refType == "INPUT" || refType == "INPUT_PULLUP" || refType == "INPUT_PULLDOWN")
+  for (size_t i = 0; i < actions.size(); i++)
   {
-    doc["value"] = String(digitalRead(refPin));
+    String ref = actions[i]["ref"].as<String>();
+    String refType = obj->remoteio_pointer->setIO[ref]["type"].as<String>();
+
+    obj->remoteio_pointer->setIO[ref]["value"] = actions[i]["value"];
+    if (refType == "OUTPUT") obj->remoteio_pointer->updatePinOutput(ref);
+
+    JsonDocument doc;
+    doc["ref"] = ref;
+    doc["value"] = actions[i]["value"];
+    doc["timestamp"] = time(nullptr); //unix time seconds, gmt+0
+
+    post_data_queue.add(doc);
+    timer_expired = true;
   }
-  else if (refType == "INPUT_ANALOG")
-  {
-    doc["value"] == String(analogRead(refPin));
-  }
-  
-  doc["timestamp"] = String(millis());
-  post_data_queue.add(doc);
-  timer_expired = true; // para sinalizar ao loop principal
-}
-
-void RemoteIO::outputTimerCallback(void *arg)
-{
-  interrupt_data* obj = (interrupt_data*)arg;
-  String ref = obj->ref_arg;
-  String newValue;
-  int current_value = obj->remoteio_pointer->setIO[ref]["value"].as<int>();
-
-  if (current_value == 1) newValue = "0";
-  else if (current_value == 0) newValue = "1";
-  
-  obj->remoteio_pointer->setIO[ref]["value"] = newValue;
-  obj->remoteio_pointer->updatePinOutput(ref);
-
-  JsonDocument doc;
-  doc["ref"] = ref;
-  doc["value"] = newValue;
-  doc["timestamp"] = String(millis());
-
-  post_data_queue.add(doc);
-  timer_expired = true; // para sinalizar ao loop principal
 }
 
 void RemoteIO::updateEventArray()
 {
-  if ((timer_expired) && (event_array.size() > 0) && (event_array[0]["active"].as<bool>()))
+  if ((timer_expired) && (event_array.size() > 0))
   {
-    event_array.remove(0);
-    timer_expired = false;
+    for (size_t i = 0; i < event_array.size(); i++)
+    {
+      if (event_array[i]["active"].as<bool>())
+      {
+        Serial.printf("\nEvento ativo (index): %d\n", i);
+        if (event_array[i]["repeat"].as<int>() > 0)
+        {
+          JsonDocument obj = event_array[0];
+          Serial.printf("\n[updateEventArray] Evento recorrente.\n");
+          String targetTimestamp = obj["targetTimestamp"].as<String>();
+          obj["targetTimestamp"] = ((strtol(targetTimestamp.c_str(), NULL, 10)) + ((obj["delay"].as<int>())/1000));
+          obj["active"] = false;
+          event_array.add(obj);
+          serializeJson(obj, Serial);
+          Serial.println("");
+          obj.clear();
+        }
 
-    // set do timer para um novo evento
-    setTimer();
-
-    // obtém novos eventos da plataforma
-    // getEvents();
+        event_array.remove(i);
+        timer_expired = false;
+        setTimer();
+        return;
+      }
+    }
   }
-}
-
-void RemoteIO::getEvents()
-{
-  // http get numa rota para pegar um array de eventos
 }
 
 void RemoteIO::setTimer()
 {
-  int currentHour, currentMinute, currentSecond;
-
   if (getLocalTime(&timeinfo) && event_array.size() > 0)
   {
-    currentHour = timeinfo.tm_hour;
-    currentMinute = timeinfo.tm_min;
-    currentSecond = timeinfo.tm_sec;
-    
-    if (!event_array[0]["state"].as<bool>()) 
+    Serial.println("");
+    Serial.print("[setTimer] event array: ");
+    serializeJson(event_array, Serial);
+    Serial.println("");
+
+    int next_event_position = 0;
+    String next_event_timestamp_string = event_array[0]["targetTimestamp"].as<String>();
+    long next_event_timestamp = strtol(next_event_timestamp_string.c_str(), NULL, 10);
+
+    for (size_t i = 1; i < event_array.size(); i++)
     {
-      int delaySeconds = (event_array[0]["targetHour"].as<int>() * 3600 + event_array[0]["targetMinute"].as<int>() * 60 + event_array[0]["targetSecond"].as<int>()) - 
-                          (currentHour * 3600 + currentMinute * 60 + currentSecond);
+      String temp_event_timestamp_string = event_array[i]["targetTimestamp"].as<String>();
+      long temp_event_timestamp = strtol(next_event_timestamp_string.c_str(), NULL, 10);
       
-      // Adjust if target time is the next day
-      if (delaySeconds < 0) delaySeconds += 86400;
+      if (temp_event_timestamp < next_event_timestamp) 
+      {
+        next_event_position = i;
+        next_event_timestamp_string = temp_event_timestamp_string;
+        next_event_timestamp = temp_event_timestamp;
+      }
+    }
 
-      String ref = event_array[0]["ref"].as<String>();
-      String refType = setIO[ref]["type"].as<String>();
+    Serial.printf("\nNext event position: %d\n", next_event_position);
+    
+    if (!event_array[next_event_position]["active"].as<bool>()) 
+    {
+      time_t now = time(nullptr);
+      String unix_time_s_string = event_array[0]["targetTimestamp"].as<String>();
 
-      Serial.print(ref);
-      Serial.printf(" event will trigger in %d seconds\n", delaySeconds);
+      long unix_time_s = strtol(unix_time_s_string.c_str(), NULL, 10);
+      int delaySeconds = unix_time_s - now;
       
-      interrupt_data* arg = new interrupt_data();
+      Serial.printf("\nEvent will trigger in %d seconds\n", delaySeconds);
+      
+      event_data* arg = new event_data();
       arg->remoteio_pointer = this;
-      arg->ref_arg = ref;
+      
+      JsonDocument* actions_pointer = new JsonDocument();
 
-      if (refType == "OUTPUT")
+      for (size_t i = 0; i < event_array[0]["actions"].size(); i++)
       {
-        os_timer_setfn(&timer, outputTimerCallback, arg);
-        os_timer_arm(&timer, delaySeconds * 1000, false);
-        event_array[0]["active"] = true;
+        actions_pointer->add(event_array[0]["actions"][i]);
       }
-      else if (refType == "INPUT" || refType == "INPUT_PULLDOWN" || refType == "INPUT_PULLUP" || refType == "INPUT_ANALOG")
-      {
-        os_timer_setfn(&timer, inputTimerCallback, arg);
-        os_timer_arm(&timer, delaySeconds * 1000, false);
-        event_array[0]["active"] = true;
-      }
+
+      arg->actions_arg = actions_pointer;
+
+      os_timer_setfn(&timer, timerEventCallback, arg);
+      os_timer_arm(&timer, delaySeconds * 1000, false);
+      event_array[0]["active"] = true;
     }
   }
 }
@@ -927,7 +934,7 @@ void RemoteIO::tryAuthenticate()
   String response = https.getString(); 
   document.clear();
   deserializeJson(document, response);
-  //Serial.println(response);
+  Serial.println(response);
 
   if (statusCode == HTTP_CODE_OK)
   {
@@ -1009,7 +1016,11 @@ void RemoteIO::tryAuthenticate()
       }
     }
 
-    //getEvents();
+    for (size_t i = 0; i < document["events"].size(); i++)
+    {
+      document["events"][i]["active"] = false; // pedir para alterar esse valor do parâmetro no back
+      event_array.add(document["events"][i]);
+    }
     setTimer();
   }
   document.clear();
@@ -1057,10 +1068,21 @@ void RemoteIO::fetchLatestData()
 
 void RemoteIO::extractIPAddress(String url)
 {
-  int startIndex = url.indexOf("//") + 2; 
-  int endIndex = url.indexOf(":", startIndex); 
+  String new_url;
 
-  _appHost = url.substring(startIndex, endIndex); 
+  if (appBaseUrl == "https://api-dev.orlaguaiba.com.br/api") 
+  {
+    new_url = "https://54.88.219.77:5000"; // url atual do back (dev)
+  }
+  else 
+  {
+    new_url = url;
+  }
+
+  int startIndex = new_url.indexOf("//") + 2; // Encontra o início do endereço IP
+  int endIndex = new_url.indexOf(":", startIndex); // Encontra o fim do endereço IP
+
+  _appHost = new_url.substring(startIndex, endIndex); // Extrai o endereço IP
 }
 
 void RemoteIO::localHttpUpdateMsg (String ref, String value)
@@ -1130,7 +1152,7 @@ int RemoteIO::espPOST(JsonDocument arrayDoc)
   doc["deviceId"] = _deviceId;
   doc["dataArray"] = arrayDoc;
   serializeJson(doc, value);
-  return espPOST("appPostDataArray", "", value);
+  return espPOST(appPostMultiData, "", value);
 }
 
 int RemoteIO::espPOST(String variable, String value)
@@ -1158,18 +1180,15 @@ int RemoteIO::espPOST(String Router, String variable, String value)
     if (Router == appPostData)
     {
       document["deviceId"] = _deviceId;
-      JsonDocument doc; 
-      doc["ref"] = variable;
-      doc["value"] = value;
-      doc["timestamp"] = String(millis());
-      document["dataArray"].add(doc);
+      document["ref"] = variable;
+      document["value"] = value;
+      document["timestamp"] = time(nullptr);
       setIO[variable]["value"] = value;
       serializeJson(document, request);
     }
-    else if (Router == "appPostDataArray")
+    else if (Router == appPostMultiData)
     {
-      Serial.println("esppost appPostDataArray");
-      route = appPostData;
+      route = appPostMultiData;
       request = value;
     }
     else request = value; 
