@@ -52,8 +52,7 @@ class RemoteIO
     void notFound(AsyncWebServerRequest *request);
     void localHttpUpdateMsg(String ref, String value);
     static void IRAM_ATTR interruptCallback(void* arg);
-    static void inputTimerCallback(void* arg);
-    static void outputTimerCallback(void* arg);
+    static void timerEventCallback(void* arg);
     void tryAuthenticate();    
     void fetchLatestData();
     void browseService(const char * service, const char * proto);
@@ -67,7 +66,6 @@ class RemoteIO
     void startAccessPoint();
     void checkResetting(long timeInterval);
     void updateEventArray();
-    void getEvents();
     void setTimer();
     int espPOST(JsonDocument arrayDoc);
     int espPOST(String Router, String variable, String value);
@@ -105,6 +103,7 @@ class RemoteIO
     String appLastDataUrl;
     String appSideDoor;
     String appPostData;
+    String appPostMultiData;
     String appPostDataFromAnchored;
 
     const char* ntp_server1 = "pool.ntp.org";
