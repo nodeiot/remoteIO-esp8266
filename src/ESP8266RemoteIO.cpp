@@ -108,7 +108,7 @@ void RemoteIO::begin()
     _model = NVS_MODEL;
     ssidAuth = NVS_SSIDAUTH;
 
-    appBaseUrl = "https://api-dev.orlaguaiba.com.br/api"; //"https://api.nodeiot.app.br/api";
+    appBaseUrl = "https://api.nodeiot.app.br/api";
     appVerifyUrl = appBaseUrl + "/devices/verify";
     appPostData = appBaseUrl + "/broker/data/";
     appPostMultiData = appBaseUrl + "/broker/multidata";
@@ -422,7 +422,7 @@ void RemoteIO::loop()
   ArduinoOTA.handle();
   switchState();
   stateLogic();
-  //checkResetting(5000); 
+  checkResetting(5000); 
   updateEventArray();
   sendDataFromQueue();
 }
@@ -821,17 +821,13 @@ void RemoteIO::updateEventArray()
     {
       if (event_array[i]["active"].as<bool>())
       {
-        Serial.printf("\nEvento ativo (index): %d\n", i);
         if (event_array[i]["repeat"].as<int>() > 0)
         {
           JsonDocument obj = event_array[0];
-          Serial.printf("\n[updateEventArray] Evento recorrente.\n");
           String targetTimestamp = obj["targetTimestamp"].as<String>();
           obj["targetTimestamp"] = ((strtol(targetTimestamp.c_str(), NULL, 10)) + ((obj["delay"].as<int>())/1000));
           obj["active"] = false;
           event_array.add(obj);
-          serializeJson(obj, Serial);
-          Serial.println("");
           obj.clear();
         }
 
@@ -848,11 +844,6 @@ void RemoteIO::setTimer()
 {
   if (getLocalTime(&timeinfo) && event_array.size() > 0)
   {
-    Serial.println("");
-    Serial.print("[setTimer] event array: ");
-    serializeJson(event_array, Serial);
-    Serial.println("");
-
     int next_event_position = 0;
     String next_event_timestamp_string = event_array[0]["targetTimestamp"].as<String>();
     long next_event_timestamp = strtol(next_event_timestamp_string.c_str(), NULL, 10);
@@ -869,8 +860,6 @@ void RemoteIO::setTimer()
         next_event_timestamp = temp_event_timestamp;
       }
     }
-
-    Serial.printf("\nNext event position: %d\n", next_event_position);
     
     if (!event_array[next_event_position]["active"].as<bool>()) 
     {
@@ -879,8 +868,6 @@ void RemoteIO::setTimer()
 
       long unix_time_s = strtol(unix_time_s_string.c_str(), NULL, 10);
       int delaySeconds = unix_time_s - now;
-      
-      Serial.printf("\nEvent will trigger in %d seconds\n", delaySeconds);
       
       event_data* arg = new event_data();
       arg->remoteio_pointer = this;
@@ -934,7 +921,7 @@ void RemoteIO::tryAuthenticate()
   String response = https.getString(); 
   document.clear();
   deserializeJson(document, response);
-  Serial.println(response);
+  //Serial.println(response);
 
   if (statusCode == HTTP_CODE_OK)
   {
