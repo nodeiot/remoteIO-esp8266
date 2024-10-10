@@ -21,9 +21,10 @@ Possibilita a leitura de sensores e acionamento de atuadores em tempo real, com 
     - [Atributos](#atributos)
       - [setIO](#setio)
     - [Métodos](#métodos)
-      - [begin](#begin)
+      - [begin](#begincallback_function)
       - [loop](#loop)
       - [updatePinOutput](#updatepinoutputstring-ref)
+      - [updatePinInput](#updatepininputstring-ref)
       - [espPOST](#esppoststring-variable-string-value)
 
 
@@ -52,7 +53,6 @@ framework = arduino
 # latest stable version
 lib_deps = gkraemer-niot@ESP8266RemoteIO
 ```
-### Usando Arduino IDE
 
 ## Primeiro uso
 
@@ -71,9 +71,24 @@ Com os passos abaixo você poderá fazer a primeira interação de um hardware [
 
 RemoteIO device1;
 
+// Define your own callback function to handle communication events with NodeIoT
+// Example:
+void myCallback(String ref, String value)
+{
+  /* 
+  if (ref == "turnOnLight")
+  {
+    device1.updatePinOutput(ref);        // This function will update the IO pin linked to 'turnOnLight' variable on previously done NodeIoT device configuration
+  }
+  
+  */
+  
+  ///Serial.printf("[myCallback] ref: %s, value: %s\n", ref, value);
+}
+
 void setup() 
 {
-  device1.begin();
+  device1.begin(myCallback);
 }
 
 void loop() 
@@ -113,16 +128,36 @@ Por exemplo, se no [Passo a passo](#passo-a-passo) você tiver criado um disposi
 ```
 Você poderá obter informações do setIO da seguinte maneira:
 ```ini
-  String mode = setIO["led"]["Mode"];               // mode = "OUTPUT"
+  String mode = setIO["led"]["type"];               // type = "OUTPUT" || type == "INPUT" || type == "INPUT_PULLUP" ...
   int ledPin = setIO["led"]["pin"].as<int>();       // ledPin = 2
-  int ledValue = setIO["led"]["value"].as<int>();   // ledValue = X            (obtém o último valor armazenado para a variável, depende das interações feitas no sistema)
+  int ledValue = setIO["led"]["value"].as<int>();   // ledValue = X (obtém o último valor armazenado para a variável, depende das interações ocorridas no sistema)
 ```
 
 ### Métodos
 
-#### begin()
+#### begin(callback_function)
 
-Inicializa o objeto RemoteIO e configura suas funcionalidades. Deve ser usado no setup do seu firmware para o correto funcionamento da comunicação entre dispositivo e NodeIoT.
+Inicializa o objeto RemoteIO e configura suas funcionalidades. Deve ser usado no setup do seu firmware para o correto funcionamento da comunicação entre dispositivo e NodeIoT. Como parâmetro, requer uma função de callback para tratar a comunicação recebida da plataforma, como mostrado no exemplo "quickStart.ino".
+
+A função de callback deve ser implementada seguindo o padrão explicado abaixo:
+
+Exemplo:
+```ini
+  void myCallback(String ref, String value)
+  {
+    // Através dos parâmetros "ref" e "value" recebidos você pode filtrar a informação recebida e definir as ações que serão executadas para cada caso.
+    
+    // Exemplo-1, acionamento de relé:
+        // Crie uma variável no seu dispositivo na plataforma. Defina no campo "referência" um nome para identificar a variável quando for recebida no firmware, ex.: "turnOnLight".
+            // Defina essa variável como OUTPUT e forneça o número de um pino físico ligado a um relé de sua placa (se houver). Crie um dashboard e adicione um componente do tipo Botão On/Off ligado à essa variável. 
+            // Dentro da sua função de callback, verifique se a "ref" recebida é a que você cadastrou no dispositivo, se sim, faça a chamada da função que atualiza o pino de saída ligado a essa referência, como feito abaixo. Com isso, você poderá controlar o relé através da plataforma.
+
+    if (ref == "turnOnLight")
+    {
+      device1.updatePinOutput(ref);        // This function will update the IO pin linked to 'turnOnLight' variable on previously done NodeIoT device configuration
+    }
+  }
+```
 
 #### loop()
 
@@ -130,7 +165,7 @@ Verifica as condições atuais do sistema e dispara ações conforme necessidade
 
 #### updatePinOutput(String ref)
 
-Atualiza, se configurado, o pino físico ligado à variável indicada pelo parâmetro "ref".
+Atualiza, se configurado, o pino físico ligado à variável indicada pelo parâmetro "ref", conforme configuração prévia do dispositivo na plataforma NodeIoT.
 
 Exemplo:
 ```ini
@@ -138,6 +173,15 @@ Exemplo:
   
   updatePinOutput("led");      // coloca o pino 2 em estado lógico HIGH, ligando o led
 ```
+#### updatePinInput(String ref)
+
+Realiza uma leitura, digital ou analógica, no pino físico ligado à variável indicada pelo parâmetro "ref", conforme configuração prévia do dispositivo na plataforma NodeIoT. Após a leitura, envia o valor lido para a plataforma.
+
+Exemplo:
+```ini
+  updatePinInput("sensor_movimento");     
+```
+Se a variável configurada para o dispositivo na plataforma NodeIoT é do tipo INPUT/INPUT_ANALOG/INPUT_PULLUP/INPUT_PULLDOWN, realiza uma leitura no pino físico associado.
 
 #### espPOST(String variable, String value)
 
