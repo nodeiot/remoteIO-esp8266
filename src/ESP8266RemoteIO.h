@@ -40,7 +40,7 @@ class RemoteIO
 {
   public:
     RemoteIO();
-    void begin();
+    void begin(void (*userCallbackFunction)(String ref, String value));
     void loop();
     void updatePinOutput(String ref);
     void updatePinInput(String ref);
@@ -60,7 +60,7 @@ class RemoteIO
     void switchState();
     void stateLogic();
     void socketIOConnect();
-    void nodeIotConnection();
+    void nodeIotConnection(void (*userCallbackFunction)(String ref, String value));
     void socketIOEvent(socketIOmessageType_t type, uint8_t *payload, size_t length);
     void extractIPAddress(String url);
     void startAccessPoint();
@@ -70,6 +70,7 @@ class RemoteIO
     int espPOST(JsonDocument arrayDoc);
     int espPOST(String Router, String variable, String value);
 
+    void (*storedCallbackFunction)(String ref, String value);
     os_timer_t timer;
 
     StaticJsonDocument<JSON_DOCUMENT_CAPACITY> configurationDocument;
@@ -137,7 +138,7 @@ class RemoteIO
     int reconnect_counter;
 };
 
-#endif // ESP8266RemoteIO_h
+#endif 
 
 
 
