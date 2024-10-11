@@ -885,7 +885,7 @@ void RemoteIO::setTimer()
     if (!event_array[next_event_position]["active"].as<bool>()) 
     {
       time_t now = time(nullptr);
-      String unix_time_s_string = event_array[0]["targetTimestamp"].as<String>();
+      String unix_time_s_string = event_array[next_event_position]["targetTimestamp"].as<String>();
 
       long unix_time_s = strtol(unix_time_s_string.c_str(), NULL, 10);
       int delaySeconds = unix_time_s - now;
@@ -895,16 +895,16 @@ void RemoteIO::setTimer()
       
       JsonDocument* actions_pointer = new JsonDocument();
 
-      for (size_t i = 0; i < event_array[0]["actions"].size(); i++)
+      for (size_t i = 0; i < event_array[next_event_position]["actions"].size(); i++)
       {
-        actions_pointer->add(event_array[0]["actions"][i]);
+        actions_pointer->add(event_array[next_event_position]["actions"][i]);
       }
 
       arg->actions_arg = actions_pointer;
 
       os_timer_setfn(&timer, timerEventCallback, arg);
       os_timer_arm(&timer, delaySeconds * 1000, false);
-      event_array[0]["active"] = true;
+      event_array[next_event_position]["active"] = true;
     }
   }
 }
