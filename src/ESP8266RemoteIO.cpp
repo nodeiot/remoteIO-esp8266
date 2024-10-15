@@ -592,6 +592,27 @@ void RemoteIO::stateLogic()
   }
 }
 
+void RemoteIO::rebootDevice()
+{
+  ESP.restart();
+}
+
+void RemoteIO::eraseDeviceSettings()
+{
+  if (SPIFFS.remove("/config.json")) Serial.printf("\nApagando configurações salvas na memória não volátil...\n");
+  else Serial.printf("\nFalha ao remover configurações armazenadas na memória não volátil. Por favor, tente novamente.\n");
+  delay(1000);
+  ESP.restart();
+}
+
+void RemoteIO::infoUpdatedEventHandler(JsonDocument payload_doc)
+{
+  String ref = payload_doc[1]["ref"];
+
+  if (ref == "restart") rebootDevice();
+  else if (ref == "reset") eraseDeviceSettings();
+}
+
 void RemoteIO::socketIOEvent(socketIOmessageType_t type, uint8_t *payload, size_t length)
 {
   switch (type)
@@ -620,6 +641,11 @@ void RemoteIO::socketIOEvent(socketIOmessageType_t type, uint8_t *payload, size_
       
       String eventName = doc[0];
 
+      if (eventName == "infoUpdated")
+      {
+        infoUpdatedEventHandler(doc);
+      }
+
       if (doc[1].containsKey("ipdest")) 
       {
         StaticJsonDocument<250> doc2;
@@ -639,14 +665,7 @@ void RemoteIO::socketIOEvent(socketIOmessageType_t type, uint8_t *payload, size_
         String ref = doc[1]["ref"];
         String value = doc[1]["value"];
 
-        if (ref == "restart") ESP.restart();
-        else if (ref == "reset")
-        {
-          if (SPIFFS.remove("/config.json")) //Serial.println("/config.json removido com sucesso!");
-          //else //Serial.println("Falha ao remover /config.json");
-          delay(1000);
-          ESP.restart();
-        }
+        infoUpdatedEventHandler(doc);
 
         setIO[ref]["value"] = value;
 
