@@ -62,6 +62,9 @@ class RemoteIO
     void socketIOConnect();
     void nodeIotConnection(void (*userCallbackFunction)(String ref, String value));
     void socketIOEvent(socketIOmessageType_t type, uint8_t *payload, size_t length);
+    void rebootDevice();
+    void eraseDeviceSettings();
+    void infoUpdatedEventHandler(JsonDocument payload_doc);
     void extractIPAddress(String url);
     void startAccessPoint();
     void checkResetting(long timeInterval);
