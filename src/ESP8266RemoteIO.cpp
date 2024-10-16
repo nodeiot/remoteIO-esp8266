@@ -607,10 +607,10 @@ void RemoteIO::eraseDeviceSettings()
 
 void RemoteIO::infoUpdatedEventHandler(JsonDocument payload_doc)
 {
-  String ref = payload_doc[1]["ref"];
+  String function = payload_doc[1]["function"];
 
-  if (ref == "restart") rebootDevice();
-  else if (ref == "reset") eraseDeviceSettings();
+  if (function == "restart") rebootDevice();
+  else if (function == "reset") eraseDeviceSettings();
 }
 
 void RemoteIO::socketIOEvent(socketIOmessageType_t type, uint8_t *payload, size_t length)
@@ -645,37 +645,40 @@ void RemoteIO::socketIOEvent(socketIOmessageType_t type, uint8_t *payload, size_
       {
         infoUpdatedEventHandler(doc);
       }
-
-      if (doc[1].containsKey("ipdest")) 
-      {
-        StaticJsonDocument<250> doc2;
-        doc2["ref"] = doc[1]["ref"];
-        doc2["value"] = doc[1]["value"];
-        
-        anchored_IP = doc[1]["ipdest"].as<String>();
-        serializeJson(doc2, send_to_anchored_buffer);
-        
-        doc2.clear();
-        
-        espPOST(anchored_route, "", send_to_anchored_buffer);
-        send_to_anchored_buffer.clear();
-      }
       else 
       {
-        String ref = doc[1]["ref"];
-        String value = doc[1]["value"];
-
-        infoUpdatedEventHandler(doc);
-
-        setIO[ref]["value"] = value;
-
-        if (setIO[ref]["type"] == "OUTPUT")
+        if (doc[1].containsKey("ipdest")) 
         {
-          updatePinOutput(ref);
+          StaticJsonDocument<250> doc2;
+          doc2["ref"] = doc[1]["ref"];
+          doc2["value"] = doc[1]["value"];
+          
+          anchored_IP = doc[1]["ipdest"].as<String>();
+          serializeJson(doc2, send_to_anchored_buffer);
+          
+          doc2.clear();
+          
+          espPOST(anchored_route, "", send_to_anchored_buffer);
+          send_to_anchored_buffer.clear();
         }
+        else 
+        {
+          String ref = doc[1]["ref"];
+          String value = doc[1]["value"];
+
+          if (ref == "restart") rebootDevice();
+          else if (ref == "reset") eraseDeviceSettings();
+
+          setIO[ref]["value"] = value;
+
+          if (setIO[ref]["type"] == "OUTPUT")
+          {
+            updatePinOutput(ref);
+          }
+        }
+        doc.clear();
+        break;
       }
-      doc.clear();
-      break;
   }
 }
 
