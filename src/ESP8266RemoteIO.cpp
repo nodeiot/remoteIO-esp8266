@@ -150,15 +150,6 @@ void RemoteIO::begin(void (*userCallbackFunction)(String ref, String value))
   String NVS_MODEL = nvsDoc["model"].as<String>();
   String NVS_IOSETTINGS = nvsDoc["ioSettings"].as<String>();
   bool NVS_SSIDAUTH = nvsDoc["ssidAuth"].as<bool>();
-  
-  //debug
-  if (NVS_SSIDAUTH) Serial.printf("\n[begin] NVS_SSIDAUTH true\n");
-  else 
-  {
-    Serial.printf("\n[begin] NVS_SSIDAUTH false\n");
-    Serial.printf("[begin] SSID: %s\tMODEL: %s\n", NVS_SSID, NVS_MODEL);  
-  }
-  //debuug
 
   if (!hasConfig)
   {
@@ -715,7 +706,6 @@ void RemoteIO::nodeIotConnection(void (*userCallbackFunction)(String ref, String
 
   if (!ssidAuth) 
   {
-    Serial.printf("\n[nodeIotConnection] NVS_SSIDAUTH false, começa a contar no wifi_conn_time \n");
     wifi_conn_time = millis();
   }
 
@@ -726,7 +716,6 @@ void RemoteIO::nodeIotConnection(void (*userCallbackFunction)(String ref, String
     {
       if (SPIFFS.remove("/config.json")) 
       {
-        Serial.println("[nodeIotConnection] apagando spiffs e reiniciando");
         delay(1000);
         ESP.restart();
       }
@@ -743,15 +732,11 @@ void RemoteIO::nodeIotConnection(void (*userCallbackFunction)(String ref, String
     File file = SPIFFS.open("/config.json", "r");
     JsonDocument nvsDoc;
     deserializeJson(nvsDoc, file);
-    Serial.printf("\n[nodeIotConnection] passa ssidAuth pra true na spiffs");
     file.close();
     nvsDoc["ssidAuth"] = true;
     SPIFFS.remove("/config.json"); 
     file = SPIFFS.open("/config.json", "w");
     serializeJson(nvsDoc, file);
-    Serial.printf("\n[nodeIotConnection] nvsDoc: ");
-    serializeJson(nvsDoc, Serial);
-    Serial.println("");
     nvsDoc.clear();
     file.close();
   }
@@ -775,7 +760,7 @@ void RemoteIO::nodeIotConnection(void (*userCallbackFunction)(String ref, String
 
     if (local_mode)
     {
-      Serial.println("[nodeIotConnection] local_mode true, interrompendo tentativas de autenticacao");
+      //Serial.println("[nodeIotConnection] local_mode true, interrompendo tentativas de autenticacao");
       break;
     }
   }
@@ -1088,10 +1073,6 @@ void RemoteIO::tryAuthenticate()
     serializeJson(doc, file);
     file.close();
 
-    Serial.print("\n[tryAuth] salvei na spiffs: ");
-    serializeJson(doc, Serial);
-    Serial.println("");
-
     doc.clear();
     setIOsAndEvents(document);
   }
@@ -1104,9 +1085,6 @@ void RemoteIO::tryAuthenticate()
     
     if (!document.isNull())
     {
-      Serial.print("[tryAuth] busquei da Spiffs: ");
-      serializeJson(document["deviceSettings"], Serial);
-      Serial.println("");
       setIOsAndEvents(document["deviceSettings"]);
       local_mode = true;
     }
