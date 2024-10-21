@@ -51,11 +51,13 @@ class RemoteIO
   private:
     void notFound(AsyncWebServerRequest *request);
     void localHttpUpdateMsg(String ref, String value);
+    void setIOsAndEvents(JsonDocument document);
     static void IRAM_ATTR interruptCallback(void* arg);
     static void timerEventCallback(void* arg);
     void tryAuthenticate();    
     void fetchLatestData();
     void browseService(const char * service, const char * proto);
+    void openLocalServer();
     void sendDataFromQueue();
     void switchState();
     void stateLogic();
@@ -86,6 +88,7 @@ class RemoteIO
     SocketIOclient socketIO;
     AsyncWebServer* server;
 
+    bool local_mode;
     bool Connected;
     bool ssidAuth;
     int Socketed;
