@@ -1,0 +1,25 @@
+{
+    "model": "ESP_8266R1",
+    "gpio": [
+                {
+                    "ref": "rel",
+                    "pin": "4",
+                    "type": "OUTPUT"
+                },
+                {
+                    "ref": "disconnect",
+                    "pin": "",
+                    "type": "virtual_v"
+                },
+                {
+                    "ref": "restart",
+                    "pin": "",
+                    "type": "virtual_v"
+                },
+                {
+                    "ref": "reset",
+                    "pin": "",
+                    "type": "virtual_v"
+                }
+    ]
+}
